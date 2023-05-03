@@ -5,6 +5,12 @@ from AppKit import NSScreen
 from datetime import datetime
 from PIL import Image
 
+def get_monitors():
+    with mss.mss() as sct:
+        for i, monitor in enumerate(sct.monitors[1:], start=0):
+            print(f"Got monitor {i} / {monitor}...")
+        return sct.monitors[1:]  # Skip the first item which represents all monitors combined
+
 # https://www.appsloveworld.com/cplus/100/619/nsscreen-not-updating-monitor-count-when-new-monitors-are-plugged-in?utm_content=cmp-true
 def get_screen_scale_factors():
     return [screen.backingScaleFactor() for screen in NSScreen.screens()]
