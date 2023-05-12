@@ -111,13 +111,17 @@ class TimerHandler(NSObject):
             self.scale_factors = get_screen_scale_factors()
             captured_images = capture_desktop()
             for display_num, img in captured_images:
-                if (datetime.now() - self.video_writer_start_times[display_num]).seconds >= SCREENSHOT_SAVE_INTERVAL:
-                    print(f"Display {display_num}: {self.frame_count[display_num]} frames written.")
-                    self.video_writers[display_num].release()
-                    self.screens = get_monitors()
-                    self.video_writers[display_num] = create_video_writer(display_num, self.screens[display_num])
-                    self.video_writer_start_times[display_num] = datetime.now()
-                    self.frame_count[display_num] = 0
+                try:
+                    if (datetime.now() - self.video_writer_start_times[display_num]).seconds >= SCREENSHOT_SAVE_INTERVAL:
+                        print(f"Display {display_num}: {self.frame_count[display_num]} frames written.")
+                        self.video_writers[display_num].release()
+                        self.screens = get_monitors()
+                        self.video_writers[display_num] = create_video_writer(display_num, self.screens[display_num])
+                        self.video_writer_start_times[display_num] = datetime.now()
+                        self.frame_count[display_num] = 0
+                except IndexError:
+                    print(f"Skipping display {display_num} due to display configuration change.")
+                    continue
 
                 frame = cv2.cvtColor(numpy.array(img), cv2.COLOR_RGB2BGR)
                 target_width, target_height = self.video_writer_dimensions[display_num]
