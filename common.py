@@ -1,14 +1,18 @@
 import os
 import mss
+import logging
 from Quartz import CGWindowListCopyWindowInfo, kCGWindowListOptionOnScreenOnly, kCGNullWindowID, kCGWindowListExcludeDesktopElements
 from AppKit import NSScreen
 from datetime import datetime
 from PIL import Image
+from log_config import setup_logging
+
+setup_logging()
 
 def get_monitors():
     with mss.mss() as sct:
         for i, monitor in enumerate(sct.monitors[1:], start=0):
-            print(f"Got monitor {i} / {monitor}...")
+            logging.debug(f"Got monitor {i} / {monitor}...")
         return sct.monitors[1:]  # Skip the first item which represents all monitors combined
 
 # https://www.appsloveworld.com/cplus/100/619/nsscreen-not-updating-monitor-count-when-new-monitors-are-plugged-in?utm_content=cmp-true
@@ -65,11 +69,11 @@ def get_relative_scale_factors():
 def get_foreground_display_num(foreground_window, screens):
     relative_scale_factors = get_relative_scale_factors()
 
-    print("Relative scale factors:", relative_scale_factors)
-    print("Screens:", screens)
+    logging.debug("Relative scale factors:", relative_scale_factors)
+    logging.debug("Screens:", screens)
 
     for display_num, screen in enumerate(screens):
-        print(f"Display {display_num}: {screen}")
+        logging.debug(f"Display {display_num}: {screen}")
         scale_width, scale_height = relative_scale_factors[display_num]
         x, y, width, height = screen['left'], screen['top'], screen['width'] * scale_width, screen['height'] * scale_height
         fx, fy, fw, fh = foreground_window['x'], foreground_window['y'], foreground_window['width'] * scale_width, foreground_window['height'] * scale_height

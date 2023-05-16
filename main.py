@@ -3,9 +3,11 @@ import numpy
 import objc
 import threading
 import os
+import logging
 
 from AppKit import NSApplication, NSNotificationCenter, NSStatusBar, NSMenu, NSMenuItem, NSImage
 from common import get_screen_scale_factors, get_monitors, get_foreground_window, capture_desktop, get_foreground_display_num
+from log_config import setup_logging
 from datetime import datetime, timedelta
 from Foundation import NSObject, NSTimer, NSRunLoop, NSDefaultRunLoopMode
 
@@ -20,7 +22,7 @@ def create_video_writer(display_num, monitor):
     filename = f"output/{timestamp}_D{display_num}.mp4"
     filepath = os.path.join(os.getcwd(), filename)
     width, height = monitor['width'], monitor['height']
-    print(f"VID {display_num}: Creating video writer for display in {filename}...")
+    logging.info(f"VID {display_num}: Creating video writer for display in {filename}...")
     return cv2.VideoWriter(filepath, fourcc, VIDEO_INTERVAL, (width, height))
 
 class AppDelegate(NSObject):
@@ -62,18 +64,18 @@ class AppDelegate(NSObject):
             sender.setTitle_("Resume")
             pause_icon = NSImage.imageNamed_("NSPauseTemplate")  # Use an appropriate icon here
             self.status_item.button().setImage_(pause_icon)
-            print("Paused...")
+            logging.info("Paused...")
         else:
             sender.setTitle_("Pause 5 minutes")
             normal_icon = NSImage.imageNamed_("NSStatusAway")
             self.status_item.button().setImage_(normal_icon)
-            print("Resumed...")
+            logging.info("Resumed...")
 
     pause_ = objc.selector(pause_, signature=b'v@:@')
 
     def screenConfigurationChanged_(self, notification):
         with self.timer_handler.lock:  # Acquire the lock
-            print("Screen configuration changed")
+            logging.info("Screen configuration changed")
             self.timer_handler.screen_configuration_changed = True
 
     screenConfigurationChanged_ = objc.selector(screenConfigurationChanged_, signature=b'v@:@')
@@ -113,14 +115,14 @@ class TimerHandler(NSObject):
             for display_num, img in captured_images:
                 try:
                     if (datetime.now() - self.video_writer_start_times[display_num]).seconds >= SCREENSHOT_SAVE_INTERVAL:
-                        print(f"Display {display_num}: {self.frame_count[display_num]} frames written.")
+                        logging.info(f"Display {display_num}: {self.frame_count[display_num]} frames written.")
                         self.video_writers[display_num].release()
                         self.screens = get_monitors()
                         self.video_writers[display_num] = create_video_writer(display_num, self.screens[display_num])
                         self.video_writer_start_times[display_num] = datetime.now()
                         self.frame_count[display_num] = 0
                 except IndexError:
-                    print(f"Skipping display {display_num} due to display configuration change.")
+                    logging.warning(f"Skipping display {display_num} due to display configuration change.")
                     continue
 
                 frame = cv2.cvtColor(numpy.array(img), cv2.COLOR_RGB2BGR)
@@ -138,23 +140,23 @@ class TimerHandler(NSObject):
             self.release_video_writers()
             pause_end_time = datetime.now() + timedelta(minutes=5)
             self.pause_end_time = pause_end_time
-            print("Pausing for 5 minutes...")
+            logging.info("Pausing for 5 minutes...")
         else:
             self.refresh_video_writers()
-            print("Resuming recording...")
+            logging.info("Resuming recording...")
 
         return self.paused
 
     def release_video_writers(self):
         if not hasattr(self, 'video_writers'):
             return
-        print("Releasing video writers...")
+        logging.info("Releasing video writers...")
         for display_num, vw in enumerate(self.video_writers):
-            print(f"Display {display_num}: {self.frame_count[display_num]} frames written.")
+            logging.info(f"Display {display_num}: {self.frame_count[display_num]} frames written.")
             vw.release()
 
     def refresh_video_writers(self):
-        print("Refreshing video writers...")
+        logging.info("Refreshing video writers...")
         self.release_video_writers()
         self.screens = get_monitors()
         self.video_writers = [create_video_writer(i, screen) for i, screen in enumerate(self.screens)]
@@ -166,23 +168,29 @@ class TimerHandler(NSObject):
         self.previous_images = [None] * len(self.screens)
 
 def main():
+    setup_logging()
+
+    logging.info("Starting up...")
     if not os.path.exists("output"):
+        logging.debug("Creating output directory...")
         os.makedirs("output")
 
-    print("Running...")
-    handler = TimerHandler.alloc().init()
-    handler.start_timer()  # Start the timer thread
-    NSApp = NSApplication.sharedApplication()
-    NSApp.setActivationPolicy_(1)  # NSApplication.ActivationPolicy.accessory
-    delegate = AppDelegate.alloc().init()
-    delegate.timer_handler = handler
-    NSApp.setDelegate_(delegate)
-    NSApp.activateIgnoringOtherApps_(True)
-    NSApp.run()
+    try:
+        handler = TimerHandler.alloc().init()
+        handler.start_timer()  # Start the timer thread
+        NSApp = NSApplication.sharedApplication()
+        NSApp.setActivationPolicy_(1)  # NSApplication.ActivationPolicy.accessory
+        delegate = AppDelegate.alloc().init()
+        delegate.timer_handler = handler
+        NSApp.setDelegate_(delegate)
+        NSApp.activateIgnoringOtherApps_(True)
+        NSApp.run()
 
-    # Release all VideoWriter instances after the app is stopped
-    for vw in handler.video_writers:
-        vw.release()
+        # Release all VideoWriter instances after the app is stopped
+        for vw in handler.video_writers:
+            vw.release()
+    except Exception as e:
+        logging.exception("A main() error occurred: %s", e)
 
 if __name__ == "__main__":
     main()
