@@ -65,42 +65,51 @@ class AppDelegate(NSObject):
         self.countdown_(sender)
         pause_icon = NSImage.imageNamed_("NSPauseTemplate")  # Use an appropriate icon here
         self.status_item.button().setImage_(pause_icon)
+        self.timer_handler.pause()
 
     pause_ = objc.selector(pause_, signature=b'v@:@')
 
     def countdown_(self, sender):
-        def update_pause_countdown():
-            remaining_time = self.timer_handler.pause_end_time - datetime.now()
-            minutes, seconds = divmod(int(remaining_time.total_seconds()), 60)
-            countdown_text = f"Pausing for {minutes:02d}:{seconds:02d}"
-            sender.setTitle_(countdown_text)
-
         def pause_finished():
             sender.setTitle_("Pause 5 minutes")
             normal_icon = NSImage.imageNamed_("NSStatusAway")
             self.status_item.button().setImage_(normal_icon)
+            self.timer_handler.resume()
+            # Invalidate the countdown timer
+            if hasattr(self, 'countdown_timer'):
+                self.countdown_timer.invalidate()
+                del self.countdown_timer
             logging.info("Resumed...")
-
-        logging.info("Countdown!")
 
         # If pause timer is still active, extend it by 5 minutes
         if hasattr(self, 'pause_timer') and self.pause_timer.is_alive():
-            logging.info("Adding delta 5m...")
+            logging.info("Adding delta 5 minutes...")
             self.timer_handler.pause_end_time += timedelta(minutes=5)
         else:
-            logging.info("Toggling pause?!...")
+            logging.info("Pausing for 5 minutes...")
             self.timer_handler.pause_end_time = datetime.now() + timedelta(minutes=5)
 
             self.pause_timer = threading.Timer(5 * 60, pause_finished)
             self.pause_timer.start()
 
-        if not hasattr(self, 'countdown_timer') or not self.countdown_timer.is_alive():
-            logging.info("Starting timer...")
-            self.countdown_timer = threading.Timer(1, update_pause_countdown)
-            self.countdown_timer.daemon = True  # Set as a daemon thread to avoid blocking app termination
-            self.countdown_timer.start()
+        if not hasattr(self, 'countdown_timer') or not self.countdown_timer.isValid():
+            logging.info("Starting countdown timer...")
+            self.countdown_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(1, self, self.updateCountdown, None, True)
+            NSRunLoop.currentRunLoop().addTimer_forMode_(self.countdown_timer, NSDefaultRunLoopMode)
 
     countdown_ = objc.selector(countdown_, signature=b'v@:@')
+
+    def updateCountdown(self, timer):
+        logging.info("Updating countdown timer...")
+        remaining_time = self.timer_handler.pause_end_time - datetime.now()
+        minutes, seconds = divmod(int(remaining_time.total_seconds()), 60)
+        countdown_text = f"Pausing for {minutes:02d}:{seconds:02d}"
+        self.status_item.menu().itemAtIndex_(0).setTitle_(countdown_text)
+        if (remaining_time < 0) {
+
+        }
+
+    updateCountdown = objc.selector(updateCountdown, signature=b'v@:@')
 
     def screenConfigurationChanged_(self, notification):
         with self.timer_handler.lock:  # Acquire the lock
@@ -151,6 +160,10 @@ class TimerHandler(NSObject):
                     logging.warning(f"Skipping display {display_num} due to display configuration change.")
                     continue
 
+                if self.video_writers[display_num] is None:
+                    logging.warning(f"No video writer for display {display_num}, skipping.")
+                    continue
+
                 frame = cv2.cvtColor(numpy.array(img), cv2.COLOR_RGB2BGR)
                 target_width, target_height = self.video_writer_dimensions[display_num]
                 resized_frame = cv2.resize(frame, (int(target_width), int(target_height)), interpolation=cv2.INTER_AREA)
@@ -163,10 +176,6 @@ class TimerHandler(NSObject):
     def pause(self):
         self.paused = True
         self.release_video_writers()
-        pause_end_time = datetime.now() + timedelta(minutes=5)
-        logging.info("Pausing for 5 minutes...")
-        resume_timer = threading.Timer(300, self.resume)  # Schedule resume after 5 minutes
-        resume_timer.start()
 
     def resume(self):
         with self.lock:
@@ -179,8 +188,11 @@ class TimerHandler(NSObject):
             return
         logging.info("Releasing video writers...")
         for display_num, vw in enumerate(self.video_writers):
+            if vw is None:
+                continue
             logging.info(f"Display {display_num}: {self.frame_count[display_num]} frames written.")
             vw.release()
+            self.video_writers[display_num] = None
 
     def refresh_video_writers(self):
         logging.info("Refreshing video writers...")
