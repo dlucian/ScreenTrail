@@ -100,13 +100,16 @@ class AppDelegate(NSObject):
     countdown_ = objc.selector(countdown_, signature=b'v@:@')
 
     def updateCountdown(self, timer):
-        logging.info("Updating countdown timer...")
-        remaining_time = self.timer_handler.pause_end_time - datetime.now()
-        minutes, seconds = divmod(int(remaining_time.total_seconds()), 60)
-        countdown_text = f"Pausing for {minutes:02d}:{seconds:02d}"
-        self.status_item.menu().itemAtIndex_(0).setTitle_(countdown_text)
-        if remaining_time < 0:
-            logging.warning(f"Timer {remaining_time}, should have resumed O.o")
+        try:
+            logging.info("Updating countdown timer...")
+            remaining_time = self.timer_handler.pause_end_time - datetime.now()
+            minutes, seconds = divmod(int(remaining_time.total_seconds()), 60)
+            countdown_text = f"Pausing for {minutes:02d}:{seconds:02d}"
+            self.status_item.menu().itemAtIndex_(0).setTitle_(countdown_text)
+            if remaining_time.total_seconds() < 0:
+                logging.warning(f"Timer {remaining_time}, should have resumed O.o")
+        except Exception:
+            logging.exception("Error updating countdown timer")
 
     updateCountdown = objc.selector(updateCountdown, signature=b'v@:@')
 
