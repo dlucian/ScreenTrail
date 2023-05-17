@@ -105,9 +105,8 @@ class AppDelegate(NSObject):
         minutes, seconds = divmod(int(remaining_time.total_seconds()), 60)
         countdown_text = f"Pausing for {minutes:02d}:{seconds:02d}"
         self.status_item.menu().itemAtIndex_(0).setTitle_(countdown_text)
-        if (remaining_time < 0) {
-
-        }
+        if remaining_time < 0:
+            logging.warning(f"Timer {remaining_time}, should have resumed O.o")
 
     updateCountdown = objc.selector(updateCountdown, signature=b'v@:@')
 
@@ -158,6 +157,7 @@ class TimerHandler(NSObject):
                         self.frame_count[display_num] = 0
                 except IndexError:
                     logging.warning(f"Skipping display {display_num} due to display configuration change.")
+                    self.refresh_video_writers()
                     continue
 
                 if self.video_writers[display_num] is None:
