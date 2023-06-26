@@ -4,6 +4,8 @@ import objc
 import threading
 import os
 import logging
+import faulthandler
+import time
 
 from AppKit import NSApplication, NSNotificationCenter, NSStatusBar, NSMenu, NSMenuItem, NSImage
 from common import get_screen_scale_factors, get_monitors, get_foreground_window, capture_desktop, get_foreground_display_num
@@ -85,12 +87,20 @@ class AppDelegate(NSObject):
         if hasattr(self, 'pause_timer') and self.pause_timer.is_alive():
             logging.info("Adding delta 5 minutes...")
             self.timer_handler.pause_end_time += timedelta(minutes=5)
+            self.pause_timer.cancel() # Cancel existing timer
         else:
             logging.info("Pausing for 5 minutes...")
             self.timer_handler.pause_end_time = datetime.now() + timedelta(minutes=5)
 
-            self.pause_timer = threading.Timer(5 * 60, pause_finished)
-            self.pause_timer.start()
+        def check_pause_end():
+            while True:
+                time.sleep(1)  # Wait for a second
+                if datetime.now() >= self.timer_handler.pause_end_time:
+                    pause_finished()
+                    break
+
+        self.pause_timer = threading.Thread(target=check_pause_end)
+        self.pause_timer.start()
 
         if not hasattr(self, 'countdown_timer') or not self.countdown_timer.isValid():
             logging.info("Starting countdown timer...")
@@ -195,7 +205,9 @@ class TimerHandler(NSObject):
                 continue
             logging.info(f"Display {display_num}: {self.frame_count[display_num]} frames written.")
             vw.release()
+            logging.debug(f"Setting video writer {display_num} to None...")
             self.video_writers[display_num] = None
+        logging.info("Video writers released.")
 
     def refresh_video_writers(self):
         logging.info("Refreshing video writers...")
@@ -208,8 +220,10 @@ class TimerHandler(NSObject):
         self.previous_images = [None] * len(self.screens)
         self.frame_count = [0] * len(self.screens)
         self.previous_images = [None] * len(self.screens)
+        logging.info("Video writers refreshed.")
 
 def main():
+    faulthandler.enable()
     setup_logging()
 
     logging.info("Starting up...")
